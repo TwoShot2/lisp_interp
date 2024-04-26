@@ -1,19 +1,18 @@
-#to do:
-#need to make * 8 8 8 work
-
-
+#!/usr/bin/env python3
+'''
+to Do:
+need to fix the pow and sqrt
+need to fix AND OR
+'''
 import math
-import os
-
-# Get the current working directory
-#current_directory = os.getcwd()
-#print("Current directory:", current_directory)
 
 
 class Environment:
-    def __init__(self, parent=None):
+    def __init__(self, var=(), val=(), parent=None):
         self.parent = parent
         self.environment = {#define the gloabl functions
+            'NIL': 'false',
+            'T': 'true',
             '+': lambda x, y: x + y,
             '-': lambda x, y: x - y,
             '*': lambda x, y: x * y,
@@ -29,15 +28,23 @@ class Environment:
             'sqrt': lambda x: math.sqrt(x),
             'pow': lambda x, y: pow(x, y),
             'pi': math.pi,
+            'list': lambda *args: list(args),
             'and': lambda x, y: x and y,
             'or': lambda x, y: x or y,
             'begin': lambda *x: x[-1],
             'not': lambda x: not x,
+            'cons': lambda l1, l2: l1 + l2,
             'quit': 'quit'
         }
+        self.define(var, val)
+        self.parms, self.body = var, val
 
     def define(self, var, val):
-        self.environment[var] = val
+        if isinstance(var, list):
+            for v, value in zip(var, val):
+                self.environment[v] = value
+        else:
+            self.environment[var] = val
 
     def lookup(self, var):
         if var in self.environment:#check if its defined in the environment
@@ -46,7 +53,11 @@ class Environment:
             return self.parent.lookup(var)
         else:#if the parent is not defined then what you are looking for must not exist
             raise NameError(f"Variable '{var}' is not defined")
- 
+        
+    def __call__(self, *args):
+        return evaluate(self.body, Environment(self.parms, args, self.environment))
+
+
 
 #def addition():
 #def subtraction():
@@ -62,12 +73,15 @@ def parser(string):
         return None
 
 
+#splits the input into tokens
 def tokenizer(string):
     token_list = string.replace("(", " ( ").replace(")", " ) ").replace("'", " ' ") # add spaces around the parentheses and quotation symbol
     token_list = token_list.split() #then split up the string
     return token_list #return the token list
 
 
+
+#creates the abstract syntax tree
 def abstract_tree(list1):
     if not list1: #makes sure that we have some tokens
         return None
@@ -82,7 +96,8 @@ def abstract_tree(list1):
         raise SyntaxError('error unexpected ")" ')
     else: 
         return atomic_element_converter(token) # if the token is not a parentheses then its either a string, float, or int 
-            
+           
+                
 def atomic_element_converter(token):
     try: return int(token) #check if its a int
     except ValueError:
@@ -90,7 +105,7 @@ def atomic_element_converter(token):
         except ValueError:
             return str(token) #if all else fails then its a string
  
-
+#evaluate the parse tree
 def evaluate(list2, environment):
     if list2 is None: 
         return None
@@ -109,11 +124,15 @@ def evaluate(list2, environment):
         return var
     elif list2[0] == 'set!': #Assignment
         var, exp = list2[1:]
-        environment[var] = evaluate(exp, environment)
+        environment.define(var, evaluate(exp, environment))
     elif list2[0] == 'defun': #Function Definition Create this using staticscoping
         print("not done")
-    elif list2[0] == "'": # Quote
-        return list2
+    elif list2[0] == "'" or list2[0] == 'quote': # Quote
+        return list2[1:]
+    elif list2[0] == 'lambda':
+        lvars = list2[1]  # List of variables
+        body = list2[2]  # arguments
+        return lambda *args: evaluate(body, Environment(lvars, args, environment))
     elif list2[0] == 'quit':# check if the user is quiting
         return list2[0]
     else: #Function call
@@ -122,9 +141,10 @@ def evaluate(list2, environment):
         return proc(*args)
 
 
-#lisp has dynamic scoping
+
 #lisp interpreter
 def main():
+    #get the user to select mode
     while True:
         user_input = input("Enter 0 for file input mode, Enter 1 for user input mode")
         if user_input in ['0', '1']:
@@ -133,11 +153,12 @@ def main():
             print("Invalid input select 1 or 0")
     
     ResultsFile = open("results.txt", "w+")#open result file
-    global_environment = Environment()
+    global_environment = Environment() #define the gloabal environment
     
     
 
     if user_input == '1':
+        #user input mode
         while True:
             val = evaluate(parser(input("> ")), global_environment)
             if val is not None: 
@@ -146,6 +167,7 @@ def main():
                 print("> " + str(val))
                 ResultsFile.write(str(val) + '\n')
     else:
+        #file input mode
         print("Enter the test file's name:")
         filename = input()
         with open(filename, "r") as f: #creates a list with each line of the file being a string
@@ -164,6 +186,3 @@ def main():
 
 if __name__=="__main__": 
     main()
-
-
-
