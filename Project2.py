@@ -1,40 +1,37 @@
-#!/usr/bin/env python3
-'''
-to Do:
-need to fix the pow and sqrt
-need to fix AND OR
-'''
+#lisp interp 1.001
 import math
-
 
 class Environment:
     def __init__(self, var=(), val=(), parent=None):
         self.parent = parent
         self.environment = {#define the gloabl functions
-            'NIL': 'false',
-            'T': 'true',
+            'NIL': False,
+            'T': True,
             '+': lambda x, y: x + y,
             '-': lambda x, y: x - y,
             '*': lambda x, y: x * y,
-            '/': lambda x, y: x / y,
+            '/': lambda x, y: division(x, y),
             '<': lambda x, y: x < y,
             '>': lambda x, y: x > y,
-            '==': lambda x, y: x == y,
+            '=': lambda x, y: x == y,
             '!=': lambda x, y: x != y,
             '<=': lambda x, y: x <= y,
             '>=': lambda x, y: x >= y,
+            'cons': lambda l1, l2: [l1] + l2 if isinstance(l2, list) else [l1, l2],
             'car': lambda x: x[0],
             'cdr': lambda x: x[1:],
             'sqrt': lambda x: math.sqrt(x),
             'pow': lambda x, y: pow(x, y),
             'pi': math.pi,
+            'null?':   lambda x: x == [],
+            'length':  len,
             'list': lambda *args: list(args),
             'and': lambda x, y: x and y,
             'or': lambda x, y: x or y,
             'begin': lambda *x: x[-1],
             'not': lambda x: not x,
-            'cons': lambda l1, l2: l1 + l2,
-            'quit': 'quit'
+            'quit': 'quit',
+            "'" : 'quote'
         }
         self.define(var, val)
         self.parms, self.body = var, val
@@ -52,25 +49,28 @@ class Environment:
         elif self.parent:#check if its defined in the parent
             return self.parent.lookup(var)
         else:#if the parent is not defined then what you are looking for must not exist
-            raise NameError(f"Variable '{var}' is not defined")
+            return var
+        
+    def set(self, var, val):
+        if var in self.environment:
+            self.environment[var] = val
+        elif self.parent is not None:
+            self.parent.set(var, val)
         
     def __call__(self, *args):
         return evaluate(self.body, Environment(self.parms, args, self.environment))
 
 
+def division(x, y):
+    if y == 0:
+        raise ZeroDivisionError('you cannot divide by zero')
+    else:
+        return x / y
 
-#def addition():
-#def subtraction():
-#def multiplication():
-#def division():
 
 
 def parser(string):
-    tokenlist = tokenizer(string) # get the token list
-    if tokenlist[0] == '(' or (len(tokenlist) == 1 and isinstance(tokenlist[0], str)):#if the token list starts with a left parentheses or it has a single token and is a string
-        return abstract_tree(tokenlist)
-    else:
-        return None
+    return abstract_tree(tokenizer(string))
 
 
 #splits the input into tokens
@@ -80,24 +80,26 @@ def tokenizer(string):
     return token_list #return the token list
 
 
-
 #creates the abstract syntax tree
 def abstract_tree(list1):
-    if not list1: #makes sure that we have some tokens
+    if not list1: # makes sure that we have some tokens
         return None
-    token = list1.pop(0)  # select the bottom element
-    if token == '(': #if its a left parentheses then continiue
+    token = list1.pop(0) # select the bottom element
+    if token == '(': # if it's a left parentheses then continue
         abs = []
         while list1[0] != ')':
             abs.append(abstract_tree(list1))
-        token = list1.pop(0)
+        token = list1.pop(0) # pop the closing parenthesis
         return abs
     elif token == ')': # if it is a right parentheses then error
         raise SyntaxError('error unexpected ")" ')
+    elif token == "'": # if it's a quote symbol handle the quoted expression
+        quoted_expr = abstract_tree(list1) # parse the quoted expression
+        return ['quote', quoted_expr] # return the quoted expression as a list
     else: 
-        return atomic_element_converter(token) # if the token is not a parentheses then its either a string, float, or int 
+        return atomic_element_converter(token) # if the token is not a parentheses then it's either a string, float, or int
            
-                
+#turns a token into either a string, float, or int       
 def atomic_element_converter(token):
     try: return int(token) #check if its a int
     except ValueError:
@@ -111,24 +113,36 @@ def evaluate(list2, environment):
         return None
     if isinstance(list2, (int, float, str)): # if it is a atom
         if isinstance(list2, str): #Variable reference
-            return environment.lookup(list2) #lookup the Variable reference. errors are caught in the Environment class
+            return environment.lookup(list2) #lookup the Variable reference.
         else: #Constant literal
             return list2
+    elif isinstance(list2[0], (int, float)):
+        return list2
+    elif list2[0] == 'quote': # Quote
+            return list2[1]
     elif list2[0] == 'if':
         test, conseq, alt = list2[1:]
         state = (conseq if evaluate(test, environment) else alt)
         return evaluate(state, environment)
     elif list2[0] == 'define': #Variable Definition
         var, exp = list2[1:]
-        environment.define(var, evaluate(exp, environment))
-        return var
+        if isinstance(var, (int, float, str)) and isinstance(exp, (int, float, str)):
+            environment.define(var, evaluate(exp, environment))
+            return var
+        else:
+            raise SyntaxError('ERROR invalid input for define')
     elif list2[0] == 'set!': #Assignment
         var, exp = list2[1:]
-        environment.define(var, evaluate(exp, environment))
+        environment.set(var, evaluate(exp, environment))
     elif list2[0] == 'defun': #Function Definition Create this using staticscoping
-        print("not done")
-    elif list2[0] == "'" or list2[0] == 'quote': # Quote
-        return list2[1:]
+        if len(list2) == 3:
+            var, exp = list2[1], list2[2]
+            environment.define(var, evaluate(exp, environment))
+            return var
+        elif len(list2) == 4:
+            var, par, exp = list2[1], list2[2], list2[3]
+            environment.define(var, lambda *args: evaluate(exp, Environment(par, args, environment)))
+            return var
     elif list2[0] == 'lambda':
         lvars = list2[1]  # List of variables
         body = list2[2]  # arguments
@@ -140,7 +154,14 @@ def evaluate(list2, environment):
         args = [evaluate(arg, environment) for arg in list2[1:]]
         return proc(*args)
 
-
+    
+#prints out, makes the lists look right
+def printer(var):
+    if isinstance(var, list):
+        return '(' + ' '.join(map(printer, var)) + ')' 
+    else:
+        return str(var)
+    
 
 #lisp interpreter
 def main():
@@ -154,8 +175,6 @@ def main():
     
     ResultsFile = open("results.txt", "w+")#open result file
     global_environment = Environment() #define the gloabal environment
-    
-    
 
     if user_input == '1':
         #user input mode
@@ -164,10 +183,11 @@ def main():
             if val is not None: 
                 if val == 'quit':
                     break
-                print("> " + str(val))
-                ResultsFile.write(str(val) + '\n')
+                val_str = printer(val)
+                print("> " + str(val_str))
+                ResultsFile.write(str(val_str) + '\n')
     else:
-        #file input mode
+        #file input mode need to concat lines together for multiline input
         print("Enter the test file's name:")
         filename = input()
         with open(filename, "r") as f: #creates a list with each line of the file being a string
@@ -177,8 +197,9 @@ def main():
             if val is not None: 
                 if val == 'quit':
                     break
-                print("> " + str(val))
-                ResultsFile.write(str(val) + '\n')
+                val_str = printer(val)
+                print("> " + str(val_str))
+                ResultsFile.write(str(val_str) + '\n')
         
     print("Exiting Lisp")
     ResultsFile.write('EOF')
