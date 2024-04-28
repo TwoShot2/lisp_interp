@@ -1,4 +1,4 @@
-#lisp interp 1.001
+#lisp interp 1.002
 import math
 
 class Environment:
@@ -34,10 +34,10 @@ class Environment:
             "'" : 'quote'
         }
         self.define(var, val)
-        self.parms, self.body = var, val
+        self.var, self.val = var, val
 
     def define(self, var, val):
-        if isinstance(var, list):
+        if isinstance(var, list):#if its a list then we need to unzip the list and add one at a time
             for v, value in zip(var, val):
                 self.environment[v] = value
         else:
@@ -58,19 +58,14 @@ class Environment:
             self.parent.set(var, val)
         
     def __call__(self, *args):
-        return evaluate(self.body, Environment(self.parms, args, self.environment))
+        return evaluate(self.val, Environment(self.var, args, self.environment))
 
-
+#simple division function if you try to divide by zero it throws an error
 def division(x, y):
     if y == 0:
         raise ZeroDivisionError('you cannot divide by zero')
     else:
         return x / y
-
-
-
-def parser(string):
-    return abstract_tree(tokenizer(string))
 
 
 #splits the input into tokens
@@ -97,7 +92,7 @@ def abstract_tree(list1):
         quoted_expr = abstract_tree(list1) # parse the quoted expression
         return ['quote', quoted_expr] # return the quoted expression as a list
     else: 
-        return atomic_element_converter(token) # if the token is not a parentheses then it's either a string, float, or int
+        return atomic_element_converter(token) # if the token is not a parentheses or quote then it's either a string, float, or int
            
 #turns a token into either a string, float, or int       
 def atomic_element_converter(token):
@@ -158,7 +153,7 @@ def evaluate(list2, environment):
 #prints out, makes the lists look right
 def printer(var):
     if isinstance(var, list):
-        return '(' + ' '.join(map(printer, var)) + ')' 
+        return '(' + ' '.join([printer(item) for item in var]) + ')' 
     else:
         return str(var)
     
@@ -179,7 +174,7 @@ def main():
     if user_input == '1':
         #user input mode
         while True:
-            val = evaluate(parser(input("> ")), global_environment)
+            val = evaluate(abstract_tree(tokenizer(input("> "))), global_environment)
             if val is not None: 
                 if val == 'quit':
                     break
@@ -187,13 +182,12 @@ def main():
                 print("> " + str(val_str))
                 ResultsFile.write(str(val_str) + '\n')
     else:
-        #file input mode need to concat lines together for multiline input
         print("Enter the test file's name:")
         filename = input()
         with open(filename, "r") as f: #creates a list with each line of the file being a string
             lines = [line.rstrip() for line in f.readlines()] # strips the new line charecter
         for x in lines:
-            val = evaluate(parser(x), global_environment)
+            val = evaluate(abstract_tree(tokenizer(x)), global_environment)
             if val is not None: 
                 if val == 'quit':
                     break
